@@ -28,9 +28,12 @@ Adafruit_LSM9DS1 motionSensor = Adafruit_LSM9DS1();
 Adafruit_BME280 enviroSensor;
 
 // sd card (SPI)
-const int chipSelect = 8; // pin number for SPI select pin
-char filename[] = "DATA0000.CSV";
-File dataFile;
+const int selectSDCard = 8; // pin number for SPI select pin
+char logFilename[] = "LOG0000.CSV";
+char motionFilename[] = "LSM0000.CSV";
+char enviroFilename[] = "BME0000.CSV";
+char extTempFilename[] = "EXTT0000.CSV";
+File logFile, motionFile, enviroFile, extTempFile;
 
 void setupHardware();
 void startHardware();
@@ -81,7 +84,13 @@ void setupHardware() {
 
 void startHardware() {
     //// sd card
-    //initializeSD();
+    // see if the card is present and can be initialized:
+    if (!SD.begin(selectSDCard)) {
+        Serial.println(F("Ruh roh... unable to initialize the SD Card"));
+        // don't do anything more:
+        while (1);
+    }
+    Serial.println(F("SD Card initialized!"));
 
     //// temperature sensor
     // start
@@ -91,62 +100,49 @@ void startHardware() {
     // start
     // Try to initialise and warn if we couldn't detect the chip
     if (!motionSensor.begin()) {
-        Serial.println("Oops ... unable to initialize the LSM9DS1. Check your wiring!");
+        Serial.println(F("Ruh roh... unable to initialize the LSM9DS1"));
         while (1);
     }
-    Serial.println("Found LSM9DS1 9DOF");
+    Serial.println(F("LSM9DS1 9DOF sensor initialized!"));
 
     //// environmental sensor
     // start
     if (!enviroSensor.begin()) {
-        Serial.println("Oops ... unable to initialize the BME280. Check your wiring!");
+        Serial.println(F("Ruh roh... unable to initialize the BME280"));
         while (1);
     }
-    Serial.println("Found BME280");
+    Serial.println(F("BME280 environmental sensor initialized!"));
     //// sd card
     // start
 
 }
 
-void initializeSD()
-{
-    Serial.print(F("Initialize SD card: "));
-
-    // see if the card is present and can be initialized:
-    if (!SD.begin(chipSelect)) {
-        Serial.println(F("FAILED (or not present)"));
-        // don't do anything more:
-        while (1);
-    }
-    Serial.println(F("SUCCESS"));
-
+void initializeSD() {
     // create a new file
-    Serial.print(F("Create log file: "));
+    Serial.print(F("Creating log and telemetry files: "));
     for (uint8_t i = 0; i < 256; i++) {
-    //filename[4] = (i/1000) % 10 + '0';
-    filename[5] = (i/100) % 10 + '0';
-    filename[6] = (i/10) % 10 + '0';
-    filename[7] = i%10 + '0';
-    if (!SD.exists(filename)) {
-        dataFile = SD.open(filename, FILE_WRITE); 
-        if (dataFile) {
-            break;  // leave the loop!
+        //logFilename[4] = (i/1000) % 10 + '0';
+        logFilename[5] = (i/100) % 10 + '0';
+        logFilename[6] = (i/10) % 10 + '0';
+        logFilename[7] = i%10 + '0';
+        if (!SD.exists(logFilename)) {
+            logFile = SD.open(logFilename, FILE_WRITE); 
+            if (logFile) {
+                Serial.print(logFilename);
+                break;  // leave the loop!
+            }
         }
-    }
-    if (i == 255) {
-            Serial.println(F("FAILED"));
+        if (i == 255) {
+            Serial.println(F("Error: failed to find an available file index"));
             while(1);
         }
     }
 
-    Serial.print(F("SUCCESS -- "));
-    Serial.println(filename);
+    logFile.print(F("Time(ms),SonicTime(ms),SonicRange(mm),LightRange(mm)"));
+    logFile.print(F(","));
+    logFile.print(F("a_x,a_y,a_z,w_x,w_y,w_z,b_x,b_y,b_z"));  
+    logFile.print(F(","));
+    logFile.println(F("temp,rh,press,alt,tempExt"));
 
-    dataFile.print(F("Time(ms),SonicTime(ms),SonicRange(mm),LightRange(mm)"));
-    dataFile.print(F(","));
-    dataFile.print(F("a_x,a_y,a_z,w_x,w_y,w_z,b_x,b_y,b_z"));  
-    dataFile.print(F(","));
-    dataFile.println(F("temp,rh,press,alt,tempExt"));
-
-    dataFile.close();
+    logFile.close();
 }
