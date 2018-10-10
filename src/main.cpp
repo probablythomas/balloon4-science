@@ -38,19 +38,29 @@ void initializeSD();
 
 void setup() {
     // put your setup code here, to run once:
+    Serial.begin(9600);
+
     Wire.begin();
     setupHardware();
     startHardware();
+
 
 }
 
 void loop() {
     // put your main code here, to run repeatedly:
-
-
+    unsigned long now = millis();
     // temperature sensor
-    temperatureSensor.requestTemperatures();
-    temperatureSensor.getTempCByIndex(0);
+    Serial.print("Requesting temperatures...");
+    temperatureSensor.requestTemperatures(); // this takes ~600 ms
+    Serial.println((millis()-now));
+    
+    // After we got the temperatures, we can print them here.
+    // We use the function ByIndex, and as an example get the temperature from the first sensor only.
+    Serial.print("Temperature for the device 1 (index 0) is: ");
+    Serial.println(temperatureSensor.getTempCByIndex(0));
+
+    delay(1000);
 }
 
 void setupHardware() {
@@ -71,7 +81,7 @@ void setupHardware() {
 
 void startHardware() {
     //// sd card
-    initializeSD();
+    //initializeSD();
 
     //// temperature sensor
     // start
@@ -79,12 +89,20 @@ void startHardware() {
 
     //// motion sensor
     // start
-    motionSensor.begin();
+    // Try to initialise and warn if we couldn't detect the chip
+    if (!motionSensor.begin()) {
+        Serial.println("Oops ... unable to initialize the LSM9DS1. Check your wiring!");
+        while (1);
+    }
+    Serial.println("Found LSM9DS1 9DOF");
 
     //// environmental sensor
     // start
-    enviroSensor.begin();
-
+    if (!enviroSensor.begin()) {
+        Serial.println("Oops ... unable to initialize the BME280. Check your wiring!");
+        while (1);
+    }
+    Serial.println("Found BME280");
     //// sd card
     // start
 
