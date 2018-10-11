@@ -28,12 +28,19 @@ Adafruit_LSM9DS1 motionSensor = Adafruit_LSM9DS1();
 Adafruit_BME280 enviroSensor;
 
 // sd card (SPI)
-const int selectSDCard = 8; // pin number for SPI select pin
+const int selectSDCard = 15; // pin number for SPI select pin
 char logFilename[] = "LOG0000.CSV";
-char motionFilename[] = "LSM0000.CSV";
-char enviroFilename[] = "BME0000.CSV";
-char extTempFilename[] = "EXTT0000.CSV";
+char motionFilename[] = "MOT0000.CSV";
+char enviroFilename[] = "ENV0000.CSV";
+char extTempFilename[] = "EXT0000.CSV";
 File logFile, motionFile, enviroFile, extTempFile;
+
+// generic
+unsigned long now, lastFastCycle = 0, lastSlowCycle = 0;
+
+// measurements
+float extTemperature, temperature, humidity, pressure;
+
 
 void setupHardware();
 void startHardware();
@@ -42,28 +49,115 @@ void initializeSD();
 void setup() {
     // put your setup code here, to run once:
     Serial.begin(9600);
+    Serial.println();
+    Serial.println(F("System startup..."));
 
     Wire.begin();
     setupHardware();
     startHardware();
+    initializeSD();
 
-
+    Serial.println(F("Startup complete!"));
 }
 
 void loop() {
     // put your main code here, to run repeatedly:
-    unsigned long now = millis();
-    // temperature sensor
-    Serial.print("Requesting temperatures...");
-    temperatureSensor.requestTemperatures(); // this takes ~600 ms
-    Serial.println((millis()-now));
-    
-    // After we got the temperatures, we can print them here.
-    // We use the function ByIndex, and as an example get the temperature from the first sensor only.
-    Serial.print("Temperature for the device 1 (index 0) is: ");
-    Serial.println(temperatureSensor.getTempCByIndex(0));
 
-    delay(1000);
+    // begin by getting a start time for this run
+    now = millis();
+
+    // fast loop, once a second?
+    if ((now - lastFastCycle) >= 100) {
+        Serial.print("fast:\t");
+        Serial.print(millis());
+        // record some stuff!
+        // motion sensor
+        motionSensor.read();
+        sensors_event_t a, m, g, temp;
+        motionSensor.getEvent(&a, &m, &g, &temp); 
+
+        // Write to SD Card
+        motionFile = SD.open(motionFilename, FILE_WRITE);
+        if (motionFile) {
+            motionFile.print(now);
+            motionFile.print(",");
+            motionFile.print(a.acceleration.x);
+            motionFile.print(",");
+            motionFile.print(a.acceleration.y);
+            motionFile.print(",");
+            motionFile.print(a.acceleration.z);
+            motionFile.print(",");
+            motionFile.print(g.gyro.x);
+            motionFile.print(",");
+            motionFile.print(g.gyro.y);
+            motionFile.print(",");
+            motionFile.print(g.gyro.z);
+            motionFile.print(",");
+            motionFile.print(m.magnetic.x);
+            motionFile.print(",");
+            motionFile.print(m.magnetic.y);
+            motionFile.print(",");
+            motionFile.print(m.magnetic.z);
+            // motionFile.print(",");
+            // motionFile.print(temp.temperature);
+            motionFile.println();
+            motionFile.close();
+        }
+        else {
+            logFile = SD.open(logFilename, FILE_WRITE);
+            if (logFile) {
+                logFile.print("Error writing fast cycle at ");
+                logFile.println(now);
+                logFile.close();
+            }
+        }
+
+        // finally, update the last fast read time
+        lastFastCycle = now;
+        Serial.print("\t");
+        Serial.print(millis());
+        Serial.println();
+    }
+
+    // slow loop, once a minute?
+    if ((now - lastSlowCycle) >= 60000) {
+        // record some stuff!
+        // External temperature
+        temperatureSensor.requestTemperatures(); // this takes ~600 ms
+        extTemperature = temperatureSensor.getTempCByIndex(0);
+
+        // BME280 measurements
+        temperature = enviroSensor.readTemperature();
+        humidity = enviroSensor.readHumidity();
+        pressure = enviroSensor.readPressure();
+
+        // Write to SD Card
+        enviroFile = SD.open(enviroFilename, FILE_WRITE);
+        if (enviroFile) {
+            enviroFile.print(now);
+            enviroFile.print(",");
+            enviroFile.print(extTemperature);
+            enviroFile.print(",");
+            enviroFile.print(temperature);
+            enviroFile.print(",");
+            enviroFile.print(humidity);
+            enviroFile.print(",");
+            enviroFile.print(pressure);
+            enviroFile.println();
+            enviroFile.close();
+        }
+        else {
+            logFile = SD.open(logFilename, FILE_WRITE);
+            if (logFile) {
+                logFile.print("Error writing slow cycle at ");
+                logFile.println(now);
+                logFile.close();
+            }
+        }
+
+        // finally, update the last fast read time
+        lastSlowCycle = now;
+    }
 }
 
 void setupHardware() {
@@ -87,7 +181,6 @@ void startHardware() {
     // see if the card is present and can be initialized:
     if (!SD.begin(selectSDCard)) {
         Serial.println(F("Ruh roh... unable to initialize the SD Card"));
-        // don't do anything more:
         while (1);
     }
     Serial.println(F("SD Card initialized!"));
@@ -112,9 +205,6 @@ void startHardware() {
         while (1);
     }
     Serial.println(F("BME280 environmental sensor initialized!"));
-    //// sd card
-    // start
-
 }
 
 void initializeSD() {
@@ -122,13 +212,13 @@ void initializeSD() {
     Serial.print(F("Creating log and telemetry files: "));
     for (uint8_t i = 0; i < 256; i++) {
         //logFilename[4] = (i/1000) % 10 + '0';
-        logFilename[5] = (i/100) % 10 + '0';
-        logFilename[6] = (i/10) % 10 + '0';
-        logFilename[7] = i%10 + '0';
+        logFilename[4] = (i/100) % 10 + '0';
+        logFilename[5] = (i/10) % 10 + '0';
+        logFilename[6] = (i) % 10 + '0';
         if (!SD.exists(logFilename)) {
             logFile = SD.open(logFilename, FILE_WRITE); 
             if (logFile) {
-                Serial.print(logFilename);
+                Serial.println(logFilename);
                 break;  // leave the loop!
             }
         }
@@ -138,11 +228,27 @@ void initializeSD() {
         }
     }
 
-    logFile.print(F("Time(ms),SonicTime(ms),SonicRange(mm),LightRange(mm)"));
-    logFile.print(F(","));
-    logFile.print(F("a_x,a_y,a_z,w_x,w_y,w_z,b_x,b_y,b_z"));  
-    logFile.print(F(","));
-    logFile.println(F("temp,rh,press,alt,tempExt"));
+    for (uint8_t j = 4; j < 7; j++) {
+        motionFilename[j] = logFilename[j];
+        enviroFilename[j] = logFilename[j];
+        // extTempFilename[j] = logFilename[j];
+    }
 
+    motionFile = SD.open(motionFilename, FILE_WRITE);
+    motionFile.println(F("Time(ms),AccelX,AccelY,AccelZ,OmegaX,OmegaY,OmegaZ,MagX,MagY,MagZ"));  
+    motionFile.close();
+
+    enviroFile = SD.open(enviroFilename, FILE_WRITE);
+    enviroFile.println(F("Time(ms),ExternalTemperature(C),InternalTemperature(C),Humidity(%),Pressure(Pa)"));
+    enviroFile.close();
+
+    // extTempFile = SD.open(extTempFilename, FILE_WRITE);
+    // extTempFile.println(F("Time(ms),ExtTemperature"));
+    // extTempFile.close();
+
+    logFile.println(F("Created telemetry files:"));
+    logFile.println(motionFilename);
+    logFile.println(enviroFilename);
+    // logFile.println(extTempFilename);
     logFile.close();
 }
