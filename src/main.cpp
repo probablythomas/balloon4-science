@@ -114,9 +114,9 @@ void loop() {
 
         // finally, update the last fast read time
         lastFastCycle = now;
-        Serial.print("\t");
-        Serial.print(millis());
-        Serial.println();
+        //Serial.print("\t");
+        //Serial.print(millis());
+        //Serial.println();
     }
 
     // slow loop, once a minute?
