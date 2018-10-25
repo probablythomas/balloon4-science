@@ -68,8 +68,8 @@ void loop() {
 
     // fast loop, once a second?
     if ((now - lastFastCycle) >= 100) {
-        Serial.print("fast:\t");
-        Serial.print(millis());
+        //Serial.print("fast:\t");
+        //Serial.print(millis());
         // record some stuff!
         // motion sensor
         motionSensor.read();
